@@ -1,0 +1,5 @@
+1. SegNet: A Deep Convolutional Encoder-Decoder Architecture for Image Segmentation.
+Badrinarayanan V. et all. October 2016
+2. U-Net: Convolutioanl Networks for Biomedical Image Segmentation. Ronneberger et al. 2015
+3. DeepLab: Semantic Image Segmentation with Deep Convolutional Nets, Atrous Convolution, and Fully Connected CRFs, Chen L. Papandreou G., June 2016
+4.
