@@ -21,7 +21,7 @@ def conv_layer(in_tensor,name, kernel_size, n_output_channels, strides=(1,1,1,1)
         n_input_channels = input_shape[-1]
         weights_shape = list(kernel_size)+[n_input_channels, n_output_channels]
         
-        weights = tf.get_variable(name='_weights', shape=weights_shape)
+        weights = tf.get_variable(name='_weights', shape=weights_shape, initializer=tf.random_normal_initializer(mean=0.5, stddev=0.02))
         biases = tf.get_variable(name='_biases', initializer=tf.zeros(shape=[n_output_channels]))
         conv = tf.nn.conv2d(in_tensor, weights, strides=strides, padding=padding_mode)
         conv = tf.nn.bias_add(conv, biases)
@@ -70,28 +70,29 @@ def build_graph(learning_rate):
     
     print('..............CONV LAYER 4 UP...............')
     output1 = tf.stack([4, 150,200,9]) 
-    w1 = tf.get_variable('w1', shape=(2,2,9,12), initializer=tf.random_normal_initializer(stddev=0.02))
+    w1 = tf.get_variable('w1', shape=(2,2,9,12), initializer=tf.random_normal_initializer(mean=0.5, stddev=0.02))
     p4 = tf.nn.conv2d_transpose(p3, w1, output_shape=output1, strides=[1,2,2,1], padding='SAME')
     tensor_info(w1, p4)
 
     print('..............CONV LAYER 5 UP...............')
     output2 = tf.stack([4, 300,400,6]) 
-    w2 = tf.get_variable('w2', shape=(2,2,6,9), initializer=tf.random_normal_initializer(stddev=0.02))
+    w2 = tf.get_variable('w2', shape=(2,2,6,9), initializer=tf.random_normal_initializer(mean=0.5, stddev=0.02))
     p5 = tf.nn.conv2d_transpose(p4, w2, output_shape=output2, strides=[1,2,2,1], padding='SAME')
     tensor_info(w2, p5) 
     
     print('..............CONV LAYER 6 UP...............')
     output3 = tf.stack([4, 600,800,1]) 
-    w3 = tf.get_variable('w3', shape=(2,2,1,6), initializer=tf.random_normal_initializer(stddev=0.02))
-    p6 = tf.nn.conv2d_transpose(p5, w3, output_shape=output3, strides=[1,2,2,1], padding='SAME')
+    w3 = tf.get_variable('w3', shape=(2,2,1,6), initializer=tf.random_normal_initializer(mean=0.5, stddev=0.02))
+    p6 = tf.nn.conv2d_transpose(p5, w3, output_shape=output3, strides=[1,2,2,1], padding='SAME', name='output')
     tensor_info(w3, p6) 
     
-#    soft_output = tf.nn.softmax(p4, name='soft_output')
-    
+    soft_output = tf.nn.softmax(p6, name='soft_output')
+    soft_input = tf.nn.softmax(tf_y, name='soft_input')
     # Verlustfunktion und Optimierung
     
     
-    cross_entropy_loss = tf.reduce_mean(tf.square(tf_y-p6), name='cross_entropy_loss')
+    cross_entropy_loss = tf.reduce_mean(tf.square(soft_output-soft_input), name='cross_entropy_loss')
+#    cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tf_y, logits=p6), name='cross_entropy_loss')
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
     optimizer = optimizer.minimize(cross_entropy_loss, name='train_op')
     
@@ -129,8 +130,8 @@ def train(sess, epochs, file_writer, saver):
         avg_loss = 0.0
         bg = load_input()
         for tf_input, tf_y in bg:
-            feed = {'input:0': tf_input, 'tf_y:0': tf_y}
-            loss,_ = sess.run(['cross_entropy_loss:0', 'train_op'], feed_dict=feed)
+            feed = {'input:0': tf_input/255, 'tf_y:0': tf_y/255}
+            loss,_,soft_output,soft_input = sess.run(['cross_entropy_loss:0', 'train_op', 'output:0', 'input:0'], feed_dict=feed)
             avg_loss += loss
 #            print(loss)
 
@@ -146,10 +147,12 @@ def train(sess, epochs, file_writer, saver):
         
         
     save(saver, sess, 0)
-
+    return soft_output,soft_input
+    
+    
 def predict(sess, X):
     feed = {'input:0': X}
-    results = sess.run(['conv2d_transpose_2:0'], feed_dict= feed)
+    results = sess.run(['output:0'], feed_dict= feed)
         
     return results
     
@@ -158,21 +161,24 @@ if __name__=='__main__':
     g = tf.Graph()
     with tf.Session(graph=g) as sess:
         # BUILD GRAPH
-        file_writer = build_graph(learning_rate=1e-3)
+        file_writer = build_graph(learning_rate=1e-4)
         
         # INIT VARIABLES / RESTORE VARIABLES
         p = """../model/cnn_model/cnn_model-0"""
-        saver = init_variables(sess, path=p)        
-        train(sess, 30, file_writer, saver)
+        saver = init_variables(sess, path=None)        
+        p6,soft_input = train(sess, 1, file_writer, saver)
         
         img = cv2.imread('../Mikro_unmarkiert/A_62_mikro_5.jpg')
         img = cv2.resize(img, (800,600))
         z = np.zeros((4,600,800,3))
         z[-1] = img
         results = predict(sess, z)
-        cv2.imshow('prediction', results[0][-1])
+#        cv2.imshow('prediction', results[0][-1])
         plt.imshow(results[0][3,:,:,0])
-        
+        plt.figure(2)
+        plt.imshow(soft_input[3,:,:,0])
+        plt.figure(3)
+        plt.imshow(p6[3,:,:,0])        
         
         
         
